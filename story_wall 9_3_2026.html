@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Wall between me and I</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#151515;color:#f5f5f5}
+button,input,textarea,select{font:inherit}
+button{border:1px solid #444;background:#242424;color:#eee;border-radius:7px;padding:8px 11px;cursor:pointer}
+button:hover{background:#303030}
+button.primary{background:#f2f2f2;color:#111;border-color:#f2f2f2;font-weight:600}
+#toolbar{position:fixed;top:0;left:0;right:0;height:64px;z-index:1000;display:flex;align-items:center;gap:10px;padding:10px 16px;background:rgba(25,25,25,.96);border-bottom:1px solid #333}
+.logo{font-size:18px;font-weight:700;margin-right:12px;white-space:nowrap}
+.toolbar-group{display:flex;align-items:center;gap:6px}.spacer{flex:1}
+#zoomLabel{min-width:55px;text-align:center;color:#aaa;font-size:13px}
+#canvas{position:absolute;inset:64px 0 0 0;overflow:hidden;cursor:grab;background-color:#191919;background-image:radial-gradient(circle,#343434 1px,transparent 1px);background-size:24px 24px}
+#canvas.dragging{cursor:grabbing}
+#world{position:absolute;width:1px;height:1px;left:0;top:0;transform-origin:0 0}
+.selection-box{
+  position:absolute;
+  border:1px solid #7aa7ff;
+  background:rgba(122,167,255,.12);
+  pointer-events:none;
+  z-index:9999;
+}
+.card{position:absolute;width:260px;min-height:170px;border-radius:9px;color:#171717;box-shadow:0 8px 22px rgba(0,0,0,.35);overflow:hidden;user-select:none}
+.card.selected{outline:3px solid #fff;outline-offset:2px}
+.card-header{height:38px;display:flex;align-items:center;padding:0 9px;background:rgba(0,0,0,.08);cursor:move}
+.card-number{font-size:12px;font-weight:700;opacity:.55;margin-right:7px}.card-type{font-size:11px;font-weight:700;opacity:.65;flex:1}
+.card-menu{border:none;background:transparent;color:#222;padding:2px 5px;font-size:17px}
+.card-body{padding:12px}.card-title{font-size:17px;font-weight:750;line-height:1.2;margin-bottom:7px;outline:none}
+.card-description{font-size:13px;line-height:1.45;opacity:.8;outline:none;white-space:pre-wrap}
+.card-footer{padding:7px 10px 9px;font-size:10px;opacity:.55}
+.yellow{background:#f8e9a8}.blue{background:#b9ddf7}.green{background:#c8e6c9}.pink{background:#f3c2d6}.purple{background:#d9c7f4}.orange{background:#f6c68d}
+#panel{position:fixed;right:16px;top:80px;width:260px;background:rgba(30,30,30,.96);border:1px solid #3c3c3c;border-radius:10px;padding:15px;z-index:900;box-shadow:0 12px 35px rgba(0,0,0,.35)}
+#panel h3{margin:0 0 12px;font-size:14px}.field{margin-bottom:12px}.field label{display:block;font-size:11px;color:#aaa;margin-bottom:5px}
+.field input,.field textarea,.field select{width:100%;border:1px solid #444;background:#202020;color:white;border-radius:6px;padding:8px;outline:none}
+.field textarea{min-height:100px;resize:vertical}.field input:focus,.field textarea:focus,.field select:focus{border-color:#aaa}
+.color-picker{display:flex;gap:7px}.color{width:28px;height:28px;padding:0;border-radius:50%;border:2px solid transparent}
+.color.active{border-color:white}.color-yellow{background:#f8e9a8}.color-blue{background:#b9ddf7}.color-green{background:#c8e6c9}.color-pink{background:#f3c2d6}.color-purple{background:#d9c7f4}.color-orange{background:#f6c68d}
+#help{position:fixed;bottom:15px;left:15px;color:#888;font-size:11px;z-index:800;background:rgba(20,20,20,.75);padding:7px 9px;border-radius:6px}
+#emptyState{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);text-align:center;color:#777;pointer-events:none}
+#emptyState strong{display:block;color:#aaa;font-size:18px;margin-bottom:7px}
+@media(max-width:700px){#panel{width:220px;right:8px;top:72px}.logo{display:none}#toolbar{gap:5px;padding:8px}button{padding:7px 8px}}
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="logo">🎬 The Wall between me and I</div>
+  <div class="toolbar-group">
+    <button id="addCard" class="primary">＋ Scene</button>
+    
+  </div>
+  <div class="toolbar-group">
+    <button id="undo">↶</button>
+    <button id="redo">↷</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="toolbar-group">
+    <button id="zoomOut">−</button>
+    <span id="zoomLabel">100%</span>
+    <button id="zoomIn">＋</button>
+  </div>
+  <button id="saveBoard">💾 Save</button><button id="loadBoard">📂 Load</button><button id="clearBoard">Clear</button>
+</div>
+
+<div id="canvas">
+  <div id="world"></div>
+  <div id="emptyState">
+    <strong>Your story starts here.</strong>
+    Click “＋ Scene” to add your first scene.
+  </div>
+</div>
+
+<div id="panel">
+  <h3>Scene Details</h3>
+  <div class="field">
+    <label>Card number</label>
+    <input id="numberInput" type="text" inputmode="numeric" placeholder="e.g. 1">
+  </div>
+
+  <div class="field">
+    <label>Scene title</label>
+    <input id="titleInput" placeholder="e.g. Sarah meets John">
+  </div>
+  <div class="field">
+    <label>Type</label>
+    <select id="typeInput">
+      <option value="SCENE">Scene</option>
+      <option value="BEAT">Beat</option>
+      <option value="CHARACTER">Character</option>
+      <option value="IDEA">Idea</option>
+      <option value="PLOT">Plot Point</option>
+      <option value="DIALOGUE">Dialogue</option>
+      <option value="ACT">Act</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Description</label>
+    <textarea id="descriptionInput" placeholder="What happens in this scene?"></textarea>
+  </div>
+  <div class="field">
+    <label>Font</label>
+    <select id="fontInput">
+      <option value="Inter, system-ui, sans-serif">Inter / System</option>
+      <option value="Arial, sans-serif">Arial</option>
+      <option value="Georgia, serif">Georgia</option>
+      <option value="Times New Roman, serif">Times New Roman</option>
+      <option value="Verdana, sans-serif">Verdana</option>
+      <option value="Trebuchet MS, sans-serif">Trebuchet MS</option>
+      <option value="Courier New, monospace">Courier New</option>
+      <option value="Garamond, serif">Garamond</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Font size</label>
+    <select id="fontSizeInput">
+      <option value="12">Small</option>
+      <option value="14">Medium</option>
+      <option value="16">Large</option>
+      <option value="18">Extra Large</option>
+      <option value="21">Huge</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Color</label>
+    <div class="color-picker">
+      <button class="color color-yellow" data-color="yellow" aria-label="Yellow"></button>
+      <button class="color color-blue" data-color="blue" aria-label="Blue"></button>
+      <button class="color color-green" data-color="green" aria-label="Green"></button>
+      <button class="color color-pink" data-color="pink" aria-label="Pink"></button>
+      <button class="color color-purple" data-color="purple" aria-label="Purple"></button>
+      <button class="color color-orange" data-color="orange" aria-label="Orange"></button>
+    </div>
+  </div>
+  <button id="deleteCard">Delete Scene</button>
+  <button id="duplicateCard">Duplicate</button>
+</div>
+
+<div id="help">Drag cards • Drag empty canvas to pan • Wheel to zoom • Double-click canvas to add</div>
+
+<script>
+const canvas=document.getElementById("canvas"),world=document.getElementById("world");
+const addCardButton=document.getElementById("addCard");
+const numberInput=document.getElementById("numberInput");
+const titleInput=document.getElementById("titleInput"),typeInput=document.getElementById("typeInput"),descriptionInput=document.getElementById("descriptionInput");
+const fontInput=document.getElementById("fontInput"),fontSizeInput=document.getElementById("fontSizeInput");
+const deleteCardButton=document.getElementById("deleteCard"),duplicateCardButton=document.getElementById("duplicateCard"),zoomLabel=document.getElementById("zoomLabel"),emptyState=document.getElementById("emptyState");
+
+let cards=[],selectedCard=null,selectedCards=new Set(),nextId=1,zoom=1,panX=300,panY=180,isPanning=false,panStartX=0,panStartY=0,initialPanX=0,initialPanY=0,draggingCards=[],dragOffsets=[],dragStartSnapshot=null,marquee=null;
+let undoStack=[],redoStack=[];
+
+function saveHistory(){undoStack.push(JSON.stringify(cards));if(undoStack.length>50)undoStack.shift();redoStack=[]}
+function undo(){if(!undoStack.length)return;redoStack.push(JSON.stringify(cards));cards=JSON.parse(undoStack.pop());selectedCard=null;render()}
+function redo(){if(!redoStack.length)return;undoStack.push(JSON.stringify(cards));cards=JSON.parse(redoStack.pop());selectedCard=null;render()}
+function saveBoard(){localStorage.setItem("storyWallCards",JSON.stringify(cards))}
+function loadBoard(){const saved=localStorage.getItem("storyWallCards");if(!saved)return;try{cards=JSON.parse(saved);if(!Array.isArray(cards))cards=[];if(cards.length)nextId=Math.max(...cards.map(c=>Number(c.id)||0))+1}catch{cards=[]}}
+function escapeHTML(v){return String(v||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
+
+function render(){
+  world.innerHTML="";
+  updateWorldTransform();
+  emptyState.style.display=cards.length?"none":"block";
+  for(const card of cards){
+    const el=document.createElement("div");
+    el.className=`card ${card.color}${selectedCards.has(card.id)?" selected":""}`;
+    el.dataset.id=card.id;
+    el.style.left=`${card.x}px`;el.style.top=`${card.y}px`;
+    el.style.fontFamily=card.font||"Inter, system-ui, sans-serif";
+    el.style.setProperty("--card-font-size",`${card.fontSize||16}px`);
+    el.innerHTML=`
+      <div class="card-header">
+        <span class="card-number">${card.number||""}</span>
+        <span class="card-type">${escapeHTML(card.type)}</span>
+        <button class="card-menu" type="button" title="Select card">•••</button>
+      </div>
+      <div class="card-body">
+        <div class="card-title" contenteditable="true" spellcheck="true"
+             style="font-size:${Math.max(13,(card.fontSize||16)+1)}px">${escapeHTML(card.title)}</div>
+        <div class="card-description" contenteditable="true" spellcheck="true"
+             style="font-size:${Math.max(11,(card.fontSize||16)-2)}px">${escapeHTML(card.description)}</div>
+      </div>
+      <div class="card-footer">Double-click text to edit</div>`;
+    world.appendChild(el);setupCardEvents(el,card);
+  }
+  updatePanel();saveBoard();
+}
+
+function setupCardEvents(el,card){
+  const header=el.querySelector(".card-header");
+  const title=el.querySelector(".card-title");
+  const description=el.querySelector(".card-description");
+
+  el.addEventListener("pointerdown",e=>{
+    if(e.target.closest("[contenteditable]")) return;
+    if(e.target.closest(".card-menu")) return;
+
+    if(e.ctrlKey||e.metaKey){
+      toggleCardSelection(card.id);
+    }else{
+      selectCard(card.id);
+    }
+  });
+
+  header.addEventListener("pointerdown",e=>{
+    if(e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Ctrl/Cmd-click toggles selection without starting a drag.
+    if(e.ctrlKey||e.metaKey){
+      toggleCardSelection(card.id);
+      return;
+    }
+
+    // If dragging an unselected card, make it the sole selection.
+    if(!selectedCards.has(card.id)) selectCard(card.id);
+
+    const r=canvas.getBoundingClientRect();
+    const wx=(e.clientX-r.left-panX)/zoom;
+    const wy=(e.clientY-r.top-panY)/zoom;
+
+    draggingCards=cards.filter(c=>selectedCards.has(c.id));
+    dragOffsets=draggingCards.map(c=>({x:wx-c.x,y:wy-c.y}));
+    dragStartSnapshot=JSON.stringify(cards);
+
+    header.classList.add("dragging");
+    document.body.style.userSelect="none";
+  });
+
+  title.addEventListener("input",()=>{
+    card.title=title.textContent;
+    saveBoard();
+  });
+
+  description.addEventListener("input",()=>{
+    card.description=description.textContent;
+    saveBoard();
+  });
+
+  title.addEventListener("pointerdown",e=>e.stopPropagation());
+  description.addEventListener("pointerdown",e=>e.stopPropagation());
+}
+
+function selectCard(id){
+  selectedCards=new Set([id]);
+  selectedCard=id;
+  render();
+}
+
+function toggleCardSelection(id){
+  if(selectedCards.has(id)){
+    selectedCards.delete(id);
+    selectedCard=selectedCards.size ? [...selectedCards][selectedCards.size-1] : null;
+  }else{
+    selectedCards.add(id);
+    selectedCard=id;
+  }
+  render();
+}
+
+function getSelectedCards(){
+  return cards.filter(c=>selectedCards.has(c.id));
+}
+
+function createCard(x=100,y=100,type="SCENE"){
+  saveHistory();
+  const card={id:nextId++,number:"",x,y,title:type==="ACT"?"Act":"New Scene",description:type==="ACT"?"Story section":"Describe what happens...",type,color:type==="ACT"?"purple":"yellow",
+    font:"Inter, system-ui, sans-serif",fontSize:16};
+  cards.push(card);selectedCards=new Set([card.id]);selectedCard=card.id;render();
+}
+function getCanvasCenter(){return{x:(canvas.clientWidth/2-panX)/zoom,y:(canvas.clientHeight/2-panY)/zoom}}
+function getSelectedCard(){return cards.find(c=>c.id===selectedCard)}
+
+addCardButton.addEventListener("click",()=>{const c=getCanvasCenter();createCard(c.x-130,c.y-80)});
+
+
+deleteCardButton.addEventListener("click",()=>{
+  if(!selectedCards.size)return;
+  saveHistory();
+  cards=cards.filter(c=>!selectedCards.has(c.id));
+  selectedCards=new Set();
+  selectedCard=null;
+  render();
+});
+duplicateCardButton.addEventListener("click",()=>{
+  const selected=getSelectedCards();if(!selected.length)return;
+  saveHistory();
+  const copies=selected.map(o=>({...o,id:nextId++,x:o.x+30,y:o.y+30,number:"",title:o.title+" Copy"}));
+  cards.push(...copies);
+  selectedCards=new Set(copies.map(c=>c.id));
+  selectedCard=copies[copies.length-1].id;
+  render();
+});
+
+function updatePanel(){
+  const c=getSelectedCard();
+  numberInput.value=c?.number??"";
+  titleInput.value=c?.title||"";typeInput.value=c?.type||"SCENE";descriptionInput.value=c?.description||"";
+  fontInput.value=c?.font||"Inter, system-ui, sans-serif";
+  fontSizeInput.value=String(c?.fontSize||16);
+  document.querySelectorAll(".color").forEach(b=>b.classList.toggle("active",b.dataset.color===c?.color));
+}
+numberInput.addEventListener("input",()=>{
+  const c=getSelectedCard();
+  if(c){
+    c.number=numberInput.value;
+    saveBoard();
+    render();
+  }
+});
+
+titleInput.addEventListener("input",()=>{const c=getSelectedCard();if(c){c.title=titleInput.value;saveBoard();render()}});
+typeInput.addEventListener("change",()=>{const c=getSelectedCard();if(c){c.type=typeInput.value;saveBoard();render()}});
+descriptionInput.addEventListener("input",()=>{const c=getSelectedCard();if(c){c.description=descriptionInput.value;saveBoard();render()}});
+fontInput.addEventListener("change",()=>{
+  const selected=getSelectedCards();if(!selected.length)return;
+  saveHistory();
+  selected.forEach(c=>c.font=fontInput.value);
+  render();
+});
+fontSizeInput.addEventListener("change",()=>{
+  const selected=getSelectedCards();if(!selected.length)return;
+  saveHistory();
+  const size=Math.max(10,Math.min(40,Number(fontSizeInput.value)||16));
+  selected.forEach(c=>c.fontSize=size);
+  render();
+});
+document.querySelectorAll(".color").forEach(b=>b.addEventListener("click",()=>{
+  const selected=getSelectedCards();if(!selected.length)return;
+  saveHistory();
+  selected.forEach(c=>c.color=b.dataset.color);
+  render();
+}));
+
+document.addEventListener("pointermove",e=>{
+  if(!draggingCards.length) return;
+
+  const r=canvas.getBoundingClientRect();
+  const wx=(e.clientX-r.left-panX)/zoom;
+  const wy=(e.clientY-r.top-panY)/zoom;
+
+  draggingCards.forEach((card,i)=>{
+    card.x=wx-dragOffsets[i].x;
+    card.y=wy-dragOffsets[i].y;
+
+    const el=world.querySelector(`.card[data-id="${card.id}"]`);
+    if(el){
+      el.style.left=`${card.x}px`;
+      el.style.top=`${card.y}px`;
+    }
+  });
+});
+
+document.addEventListener("pointerup",()=>{
+  if(!draggingCards.length) return;
+
+  if(dragStartSnapshot!==JSON.stringify(cards)){
+    undoStack.push(dragStartSnapshot);
+    if(undoStack.length>50)undoStack.shift();
+    redoStack=[];
+  }
+
+  draggingCards=[];
+  dragOffsets=[];
+  dragStartSnapshot=null;
+  document.body.style.userSelect="";
+});
+canvas.addEventListener("pointerdown",e=>{
+  if(e.button!==0) return;
+  if(e.target!==canvas) return;
+
+  const r=canvas.getBoundingClientRect();
+
+  // Shift-drag is dedicated to panning around the canvas.
+  if(e.shiftKey){
+    isPanning=true;
+    panStartX=e.clientX;
+    panStartY=e.clientY;
+    initialPanX=panX;
+    initialPanY=panY;
+    document.body.style.userSelect="none";
+    return;
+  }
+
+  const sx=(e.clientX-r.left-panX)/zoom;
+  const sy=(e.clientY-r.top-panY)/zoom;
+
+  // Normal drag on empty canvas starts a rectangular selection.
+  marquee={
+    startX:sx,startY:sy,
+    currentX:sx,currentY:sy,
+    additive:e.ctrlKey||e.metaKey,
+    moved:false
+  };
+
+  if(!marquee.additive){
+    selectedCards=new Set();
+    selectedCard=null;
+  }
+
+  const box=document.createElement("div");
+  box.className="selection-box";
+  box.id="selectionBox";
+  world.appendChild(box);
+  updateMarqueeBox();
+  document.body.style.userSelect="none";
+});
+
+function updateMarqueeBox(){
+  if(!marquee) return;
+  const box=document.getElementById("selectionBox");
+  if(!box) return;
+  const x=Math.min(marquee.startX,marquee.currentX);
+  const y=Math.min(marquee.startY,marquee.currentY);
+  const w=Math.abs(marquee.currentX-marquee.startX);
+  const h=Math.abs(marquee.currentY-marquee.startY);
+  box.style.left=`${x}px`;
+  box.style.top=`${y}px`;
+  box.style.width=`${w}px`;
+  box.style.height=`${h}px`;
+}
+
+document.addEventListener("pointermove",e=>{
+  if(isPanning){
+    panX=initialPanX+(e.clientX-panStartX);
+    panY=initialPanY+(e.clientY-panStartY);
+    render();
+    return;
+  }
+
+  if(!marquee) return;
+
+  const r=canvas.getBoundingClientRect();
+  marquee.currentX=(e.clientX-r.left-panX)/zoom;
+  marquee.currentY=(e.clientY-r.top-panY)/zoom;
+
+  if(Math.abs(marquee.currentX-marquee.startX)>4 ||
+     Math.abs(marquee.currentY-marquee.startY)>4){
+    marquee.moved=true;
+    updateMarqueeBox();
+
+    const x1=Math.min(marquee.startX,marquee.currentX);
+    const y1=Math.min(marquee.startY,marquee.currentY);
+    const x2=Math.max(marquee.startX,marquee.currentX);
+    const y2=Math.max(marquee.startY,marquee.currentY);
+
+    const newlySelected=new Set(marquee.additive ? selectedCards : []);
+
+    // Select cards whose world-space rectangles intersect the marquee.
+    cards.forEach(c=>{
+      const el=world.querySelector(`.card[data-id="${c.id}"]`);
+      if(!el) return;
+      const left=c.x;
+      const top=c.y;
+      const right=left+el.offsetWidth;
+      const bottom=top+el.offsetHeight;
+
+      if(left<x2 && right>x1 && top<y2 && bottom>y1){
+        newlySelected.add(c.id);
+      }
+    });
+
+    selectedCards=newlySelected;
+    selectedCard=selectedCards.size ? [...selectedCards][selectedCards.size-1] : null;
+    world.querySelectorAll(".card").forEach(el=>{
+      el.classList.toggle("selected",selectedCards.has(Number(el.dataset.id)));
+    });
+    updatePanel();
+    updateMarqueeBox();
+  }
+});
+
+document.addEventListener("pointerup",()=>{
+  if(isPanning){
+    isPanning=false;
+    document.body.style.userSelect="";
+    return;
+  }
+
+  if(!marquee) return;
+
+  const wasMoved=marquee.moved;
+  const additive=marquee.additive;
+
+  document.getElementById("selectionBox")?.remove();
+  marquee=null;
+  document.body.style.userSelect="";
+
+  if(!wasMoved && !additive){
+    selectedCards=new Set();
+    selectedCard=null;
+    render();
+  }
+});
+canvas.addEventListener("wheel",e=>{
+  e.preventDefault();const old=zoom,r=canvas.getBoundingClientRect(),cx=e.clientX-r.left,cy=e.clientY-r.top;
+  const wx=(cx-panX)/old,wy=(cy-panY)/old;zoom=Math.max(.35,Math.min(2.5,zoom*(e.deltaY<0?1.1:.9)));
+  panX=cx-wx*zoom;panY=cy-wy*zoom;updateWorldTransform();
+},{passive:false});
+
+function updateWorldTransform(){world.style.transform=`translate(${panX}px,${panY}px) scale(${zoom})`;zoomLabel.textContent=`${Math.round(zoom*100)}%`}
+document.getElementById("zoomIn").addEventListener("click",()=>{zoom=Math.min(2.5,zoom*1.15);updateWorldTransform()});
+document.getElementById("zoomOut").addEventListener("click",()=>{zoom=Math.max(.35,zoom/1.15);updateWorldTransform()});
+
+canvas.addEventListener("dblclick",e=>{if(e.target.closest(".card"))return;const r=canvas.getBoundingClientRect();createCard((e.clientX-r.left-panX)/zoom-130,(e.clientY-r.top-panY)/zoom-80)});
+
+document.getElementById("clearBoard").addEventListener("click",()=>{if(!cards.length)return;if(confirm("Delete every card on this board?")){saveHistory();cards=[];selectedCards=new Set();selectedCard=null;render()}});
+document.getElementById("undo").addEventListener("click",undo);document.getElementById("redo").addEventListener("click",redo);
+
+document.addEventListener("keydown",e=>{
+  if(e.target.matches("input,textarea,[contenteditable='true']"))return;
+  if((e.key==="Delete"||e.key==="Backspace")&&selectedCards.size)deleteCardButton.click();
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="d"){e.preventDefault();duplicateCardButton.click()}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();undo()}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="y"){e.preventDefault();redo()}
+});
+
+
+function downloadBoard(){
+  try{
+    const data={
+      app:"The Wall between me and I",
+      version:2,
+      savedAt:new Date().toISOString(),
+      cards:cards
+    };
+
+    const blob=new Blob(
+      [JSON.stringify(data,null,2)],
+      {type:"application/json"}
+    );
+
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement("a");
+
+    link.href=url;
+    link.download="story-wall-"+new Date().toISOString().slice(0,10)+".json";
+    link.style.display="none";
+
+    document.body.appendChild(link);
+    link.click();
+
+    setTimeout(function(){
+      link.remove();
+      URL.revokeObjectURL(url);
+    },1000);
+
+  }catch(error){
+    console.error(error);
+    alert("Could not save the board. Please try opening the HTML file directly in your browser.");
+  }
+}
+
+function importBoard(){
+  const input=document.createElement("input");
+  input.type="file";
+  input.accept=".json,.storywall,application/json";
+  input.style.display="none";
+
+  input.addEventListener("change",function(){
+    const file=input.files && input.files[0];
+    if(!file){
+      input.remove();
+      return;
+    }
+
+    const reader=new FileReader();
+
+    reader.onload=function(){
+      try{
+        const data=JSON.parse(reader.result);
+        const imported=Array.isArray(data)?data:data.cards;
+
+        if(!Array.isArray(imported)){
+          throw new Error("Invalid Story Wall file");
+        }
+
+        saveHistory();
+
+        cards=imported.map(function(c,i){
+          return {
+            id:Number(c.id)||i+1,
+            number:c.number??"",
+            x:Number.isFinite(Number(c.x))?Number(c.x):100,
+            y:Number.isFinite(Number(c.y))?Number(c.y):100,
+            title:String(c.title||"Untitled"),
+            description:String(c.description||""),
+            type:String(c.type||"SCENE"),
+            color:["yellow","blue","green","pink","purple","orange"].includes(c.color)?c.color:"yellow",
+            font:String(c.font||"Inter, system-ui, sans-serif"),
+            fontSize:Math.max(10,Math.min(40,Number(c.fontSize)||16))
+          };
+        });
+
+        nextId=cards.length
+          ? Math.max.apply(null,cards.map(function(c){return c.id;}))+1
+          : 1;
+
+        selectedCard=null;
+        render();
+
+      }catch(error){
+        console.error(error);
+        alert("That file is not a valid The Wall between me and I save file.");
+      }
+
+      input.remove();
+    };
+
+    reader.onerror=function(){
+      alert("The file could not be read.");
+      input.remove();
+    };
+
+    reader.readAsText(file);
+  });
+
+  document.body.appendChild(input);
+  input.click();
+}
+
+document.getElementById("saveBoard").addEventListener("click",downloadBoard);
+document.getElementById("loadBoard").addEventListener("click",importBoard);
+
+loadBoard();render();
+</script>
+</body>
+</html>
