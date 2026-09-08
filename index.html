@@ -25,15 +25,16 @@ button.primary{background:#f2f2f2;color:#111;border-color:#f2f2f2;font-weight:60
   pointer-events:none;
   z-index:9999;
 }
-.card{position:absolute;width:260px;min-height:170px;border-radius:9px;color:#171717;box-shadow:0 8px 22px rgba(0,0,0,.35);overflow:hidden;user-select:none}
+.card{position:absolute;width:260px;min-height:170px;border-radius:9px;color:#171717;box-shadow:0 8px 22px rgba(0,0,0,.35);overflow:hidden;user-select:none;display:flex;flex-direction:column}
 .card.selected{outline:3px solid #fff;outline-offset:2px}
 .card-header{height:38px;display:flex;align-items:center;padding:0 9px;background:rgba(0,0,0,.08);cursor:move}
 .card-number{font-size:12px;font-weight:700;opacity:.55;margin-right:7px}.card-type{font-size:11px;font-weight:700;opacity:.65;flex:1}
 .card-menu{border:none;background:transparent;color:#222;padding:2px 5px;font-size:17px}
-.card-body{padding:12px}.card-title{font-size:17px;font-weight:750;line-height:1.2;margin-bottom:7px;outline:none}
+.card-body{padding:12px;flex:1;min-height:0;display:flex;flex-direction:column}.card-title{font-size:17px;font-weight:750;line-height:1.2;margin-bottom:7px;outline:none}
 .card-description{font-size:13px;line-height:1.45;opacity:.8;outline:none;white-space:pre-wrap}
-.card-image{display:block;width:100%;max-height:180px;object-fit:cover;border-radius:6px;margin:0 0 10px;background:rgba(0,0,0,.08)}
+.card-image{display:block;width:100%;min-height:0;flex:1;object-fit:contain;border-radius:6px;margin:0 0 10px;background:rgba(0,0,0,.08)}
 .card-footer{padding:7px 10px 9px;font-size:10px;opacity:.55}
+.resize-handle{position:absolute;z-index:3}.resize-right{right:0;top:38px;bottom:0;width:10px;cursor:ew-resize}.resize-corner{right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 45%,rgba(0,0,0,.28) 46%,rgba(0,0,0,.28) 55%,transparent 56%)}
 .yellow{background:#f8e9a8}.blue{background:#b9ddf7}.green{background:#c8e6c9}.pink{background:#f3c2d6}.purple{background:#d9c7f4}.orange{background:#f6c68d}
 #panel{position:fixed;right:16px;top:80px;width:260px;background:rgba(30,30,30,.96);border:1px solid #3c3c3c;border-radius:10px;padding:15px;z-index:900;box-shadow:0 12px 35px rgba(0,0,0,.35)}
 #panel h3{margin:0 0 12px;font-size:14px}.field{margin-bottom:12px}.field label{display:block;font-size:11px;color:#aaa;margin-bottom:5px}
@@ -163,7 +164,7 @@ const fontInput=document.getElementById("fontInput"),fontSizeInput=document.getE
 const deleteCardButton=document.getElementById("deleteCard"),duplicateCardButton=document.getElementById("duplicateCard"),zoomLabel=document.getElementById("zoomLabel"),emptyState=document.getElementById("emptyState");
 const imageInput=document.getElementById("imageInput"),removeImageButton=document.getElementById("removeImage"),imageStatus=document.getElementById("imageStatus");
 
-let cards=[],selectedCard=null,selectedCards=new Set(),nextId=1,zoom=1,panX=300,panY=180,isPanning=false,panStartX=0,panStartY=0,initialPanX=0,initialPanY=0,draggingCards=[],dragOffsets=[],dragStartSnapshot=null,marquee=null;
+let cards=[],selectedCard=null,selectedCards=new Set(),nextId=1,zoom=1,panX=300,panY=180,isPanning=false,panStartX=0,panStartY=0,initialPanX=0,initialPanY=0,draggingCards=[],dragOffsets=[],dragStartSnapshot=null,marquee=null,resizing=null;
 let undoStack=[],redoStack=[];
 
 function saveHistory(){undoStack.push(JSON.stringify(cards));if(undoStack.length>50)undoStack.shift();redoStack=[]}
@@ -182,6 +183,8 @@ function render(){
     el.className=`card ${card.color}${selectedCards.has(card.id)?" selected":""}`;
     el.dataset.id=card.id;
     el.style.left=`${card.x}px`;el.style.top=`${card.y}px`;
+    if(card.width)el.style.width=`${card.width}px`;
+    if(card.height)el.style.height=`${card.height}px`;
     el.style.fontFamily=card.font||"Inter, system-ui, sans-serif";
     el.style.setProperty("--card-font-size",`${card.fontSize||16}px`);
     el.innerHTML=`
@@ -197,7 +200,9 @@ function render(){
         <div class="card-description" contenteditable="true" spellcheck="true"
              style="font-size:${Math.max(11,(card.fontSize||16)-2)}px">${escapeHTML(card.description)}</div>
       </div>
-      <div class="card-footer">Double-click text to edit</div>`;
+      <div class="card-footer">Double-click text to edit</div>
+      <div class="resize-handle resize-right" data-resize="right" title="Drag to resize width"></div>
+      <div class="resize-handle resize-corner" data-resize="corner" title="Drag to resize"></div>`;
     world.appendChild(el);setupCardEvents(el,card);
   }
   updatePanel();saveBoard();
@@ -207,6 +212,14 @@ function setupCardEvents(el,card){
   const header=el.querySelector(".card-header");
   const title=el.querySelector(".card-title");
   const description=el.querySelector(".card-description");
+
+  el.querySelectorAll(".resize-handle").forEach(handle=>handle.addEventListener("pointerdown",e=>{
+    if(e.button!==0)return;
+    e.preventDefault();e.stopPropagation();
+    const r=canvas.getBoundingClientRect();
+    resizing={card,el,mode:handle.dataset.resize,startX:(e.clientX-r.left-panX)/zoom,startY:(e.clientY-r.top-panY)/zoom,startWidth:el.offsetWidth,startHeight:el.offsetHeight,snapshot:JSON.stringify(cards)};
+    document.body.style.userSelect="none";
+  }));
 
   el.addEventListener("pointerdown",e=>{
     if(e.target.closest("[contenteditable]")) return;
@@ -283,7 +296,7 @@ function getSelectedCards(){
 function createCard(x=100,y=100,type="SCENE"){
   saveHistory();
   const card={id:nextId++,number:"",x,y,title:type==="ACT"?"Act":"New Scene",description:type==="ACT"?"Story section":"Describe what happens...",type,color:type==="ACT"?"purple":"yellow",
-    font:"Inter, system-ui, sans-serif",fontSize:16};
+    font:"Inter, system-ui, sans-serif",fontSize:21};
   cards.push(card);selectedCards=new Set([card.id]);selectedCard=card.id;render();
 }
 function getCanvasCenter(){return{x:(canvas.clientWidth/2-panX)/zoom,y:(canvas.clientHeight/2-panY)/zoom}}
@@ -395,6 +408,20 @@ document.addEventListener("pointerup",()=>{
   dragOffsets=[];
   dragStartSnapshot=null;
   document.body.style.userSelect="";
+});
+document.addEventListener("pointermove",e=>{
+  if(!resizing)return;
+  const r=canvas.getBoundingClientRect();
+  const x=(e.clientX-r.left-panX)/zoom,y=(e.clientY-r.top-panY)/zoom;
+  resizing.card.width=Math.max(180,resizing.startWidth+(x-resizing.startX));
+  if(resizing.mode==="corner")resizing.card.height=Math.max(170,resizing.startHeight+(y-resizing.startY));
+  resizing.el.style.width=`${resizing.card.width||resizing.startWidth}px`;
+  if(resizing.card.height)resizing.el.style.height=`${resizing.card.height}px`;
+});
+document.addEventListener("pointerup",()=>{
+  if(!resizing)return;
+  if(resizing.snapshot!==JSON.stringify(cards)){undoStack.push(resizing.snapshot);if(undoStack.length>50)undoStack.shift();redoStack=[];saveBoard()}
+  resizing=null;document.body.style.userSelect="";
 });
 canvas.addEventListener("pointerdown",e=>{
   if(e.button!==0) return;
@@ -620,6 +647,8 @@ function importBoard(){
             color:["yellow","blue","green","pink","purple","orange"].includes(c.color)?c.color:"yellow",
             font:String(c.font||"Inter, system-ui, sans-serif"),
             fontSize:Math.max(10,Math.min(40,Number(c.fontSize)||16)),
+            width:Math.max(180,Number(c.width)||260),
+            height:Math.max(170,Number(c.height)||170),
             image:typeof c.image==="string"&&c.image.startsWith("data:image/")?c.image:""
           };
         });
