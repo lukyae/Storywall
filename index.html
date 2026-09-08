@@ -25,7 +25,7 @@ button.primary{background:#f2f2f2;color:#111;border-color:#f2f2f2;font-weight:60
   pointer-events:none;
   z-index:9999;
 }
-.card{position:absolute;width:260px;min-height:170px;border-radius:9px;color:#171717;box-shadow:0 8px 22px rgba(0,0,0,.35);overflow:hidden;user-select:none;display:flex;flex-direction:column}
+.card{position:absolute;width:260px;min-height:220px;border-radius:9px;color:#171717;box-shadow:0 8px 22px rgba(0,0,0,.35);overflow:hidden;user-select:none;display:flex;flex-direction:column}
 .card.selected{outline:3px solid #fff;outline-offset:2px}
 .card-header{height:38px;display:flex;align-items:center;padding:0 9px;background:rgba(0,0,0,.08);cursor:move}
 .card-number{font-size:12px;font-weight:700;opacity:.55;margin-right:7px}.card-type{font-size:11px;font-weight:700;opacity:.65;flex:1}
@@ -203,7 +203,11 @@ function render(){
       <div class="card-footer">Double-click text to edit</div>
       <div class="resize-handle resize-right" data-resize="right" title="Drag to resize width"></div>
       <div class="resize-handle resize-corner" data-resize="corner" title="Drag to resize"></div>`;
-    world.appendChild(el);setupCardEvents(el,card);
+    world.appendChild(el);
+    // Older saved cards may have a fixed height that is now too short for their content.
+    const contentHeight=el.scrollHeight;
+    if(card.height&&card.height<contentHeight){card.height=contentHeight;el.style.height=`${contentHeight}px`;}
+    setupCardEvents(el,card);
   }
   updatePanel();saveBoard();
 }
@@ -414,7 +418,7 @@ document.addEventListener("pointermove",e=>{
   const r=canvas.getBoundingClientRect();
   const x=(e.clientX-r.left-panX)/zoom,y=(e.clientY-r.top-panY)/zoom;
   resizing.card.width=Math.max(180,resizing.startWidth+(x-resizing.startX));
-  if(resizing.mode==="corner")resizing.card.height=Math.max(170,resizing.startHeight+(y-resizing.startY));
+  if(resizing.mode==="corner")resizing.card.height=Math.max(220,resizing.startHeight+(y-resizing.startY));
   resizing.el.style.width=`${resizing.card.width||resizing.startWidth}px`;
   if(resizing.card.height)resizing.el.style.height=`${resizing.card.height}px`;
 });
@@ -648,7 +652,7 @@ function importBoard(){
             font:String(c.font||"Inter, system-ui, sans-serif"),
             fontSize:Math.max(10,Math.min(40,Number(c.fontSize)||16)),
             width:Math.max(180,Number(c.width)||260),
-            height:Math.max(170,Number(c.height)||170),
+            height:Math.max(220,Number(c.height)||220),
             image:typeof c.image==="string"&&c.image.startsWith("data:image/")?c.image:""
           };
         });
