@@ -32,12 +32,14 @@ button.primary{background:#f2f2f2;color:#111;border-color:#f2f2f2;font-weight:60
 .card-menu{border:none;background:transparent;color:#222;padding:2px 5px;font-size:17px}
 .card-body{padding:12px}.card-title{font-size:17px;font-weight:750;line-height:1.2;margin-bottom:7px;outline:none}
 .card-description{font-size:13px;line-height:1.45;opacity:.8;outline:none;white-space:pre-wrap}
+.card-image{display:block;width:100%;max-height:180px;object-fit:cover;border-radius:6px;margin:0 0 10px;background:rgba(0,0,0,.08)}
 .card-footer{padding:7px 10px 9px;font-size:10px;opacity:.55}
 .yellow{background:#f8e9a8}.blue{background:#b9ddf7}.green{background:#c8e6c9}.pink{background:#f3c2d6}.purple{background:#d9c7f4}.orange{background:#f6c68d}
 #panel{position:fixed;right:16px;top:80px;width:260px;background:rgba(30,30,30,.96);border:1px solid #3c3c3c;border-radius:10px;padding:15px;z-index:900;box-shadow:0 12px 35px rgba(0,0,0,.35)}
 #panel h3{margin:0 0 12px;font-size:14px}.field{margin-bottom:12px}.field label{display:block;font-size:11px;color:#aaa;margin-bottom:5px}
 .field input,.field textarea,.field select{width:100%;border:1px solid #444;background:#202020;color:white;border-radius:6px;padding:8px;outline:none}
 .field textarea{min-height:100px;resize:vertical}.field input:focus,.field textarea:focus,.field select:focus{border-color:#aaa}
+.image-actions{display:flex;align-items:center;gap:8px}.image-actions input{font-size:12px;padding:6px}.image-actions button{padding:7px 9px;white-space:nowrap}.image-status{display:block;margin-top:5px;font-size:10px;color:#999}
 .color-picker{display:flex;gap:7px}.color{width:28px;height:28px;padding:0;border-radius:50%;border:2px solid transparent}
 .color.active{border-color:white}.color-yellow{background:#f8e9a8}.color-blue{background:#b9ddf7}.color-green{background:#c8e6c9}.color-pink{background:#f3c2d6}.color-purple{background:#d9c7f4}.color-orange{background:#f6c68d}
 #help{position:fixed;bottom:15px;left:15px;color:#888;font-size:11px;z-index:800;background:rgba(20,20,20,.75);padding:7px 9px;border-radius:6px}
@@ -103,6 +105,14 @@ button.primary{background:#f2f2f2;color:#111;border-color:#f2f2f2;font-weight:60
     <textarea id="descriptionInput" placeholder="What happens in this scene?"></textarea>
   </div>
   <div class="field">
+    <label>Scene picture</label>
+    <div class="image-actions">
+      <input id="imageInput" type="file" accept="image/*">
+      <button id="removeImage" type="button">Remove</button>
+    </div>
+    <span id="imageStatus" class="image-status">No picture selected</span>
+  </div>
+  <div class="field">
     <label>Font</label>
     <select id="fontInput">
       <option value="Inter, system-ui, sans-serif">Inter / System</option>
@@ -151,6 +161,7 @@ const numberInput=document.getElementById("numberInput");
 const titleInput=document.getElementById("titleInput"),typeInput=document.getElementById("typeInput"),descriptionInput=document.getElementById("descriptionInput");
 const fontInput=document.getElementById("fontInput"),fontSizeInput=document.getElementById("fontSizeInput");
 const deleteCardButton=document.getElementById("deleteCard"),duplicateCardButton=document.getElementById("duplicateCard"),zoomLabel=document.getElementById("zoomLabel"),emptyState=document.getElementById("emptyState");
+const imageInput=document.getElementById("imageInput"),removeImageButton=document.getElementById("removeImage"),imageStatus=document.getElementById("imageStatus");
 
 let cards=[],selectedCard=null,selectedCards=new Set(),nextId=1,zoom=1,panX=300,panY=180,isPanning=false,panStartX=0,panStartY=0,initialPanX=0,initialPanY=0,draggingCards=[],dragOffsets=[],dragStartSnapshot=null,marquee=null;
 let undoStack=[],redoStack=[];
@@ -180,6 +191,7 @@ function render(){
         <button class="card-menu" type="button" title="Select card">•••</button>
       </div>
       <div class="card-body">
+        ${card.image ? `<img class="card-image" src="${card.image}" alt="Scene reference image">` : ""}
         <div class="card-title" contenteditable="true" spellcheck="true"
              style="font-size:${Math.max(13,(card.fontSize||16)+1)}px">${escapeHTML(card.title)}</div>
         <div class="card-description" contenteditable="true" spellcheck="true"
@@ -304,6 +316,9 @@ function updatePanel(){
   titleInput.value=c?.title||"";typeInput.value=c?.type||"SCENE";descriptionInput.value=c?.description||"";
   fontInput.value=c?.font||"Inter, system-ui, sans-serif";
   fontSizeInput.value=String(c?.fontSize||16);
+  imageInput.value="";
+  imageStatus.textContent=c?.image?"Picture attached":"No picture selected";
+  removeImageButton.disabled=!c?.image;
   document.querySelectorAll(".color").forEach(b=>b.classList.toggle("active",b.dataset.color===c?.color));
 }
 numberInput.addEventListener("input",()=>{
@@ -318,6 +333,16 @@ numberInput.addEventListener("input",()=>{
 titleInput.addEventListener("input",()=>{const c=getSelectedCard();if(c){c.title=titleInput.value;saveBoard();render()}});
 typeInput.addEventListener("change",()=>{const c=getSelectedCard();if(c){c.type=typeInput.value;saveBoard();render()}});
 descriptionInput.addEventListener("input",()=>{const c=getSelectedCard();if(c){c.description=descriptionInput.value;saveBoard();render()}});
+imageInput.addEventListener("change",()=>{
+  const c=getSelectedCard(),file=imageInput.files?.[0];
+  if(!c||!file)return;
+  if(!file.type.startsWith("image/")){alert("Please choose an image file.");imageInput.value="";return}
+  const reader=new FileReader();
+  reader.onload=()=>{saveHistory();c.image=reader.result;render()};
+  reader.onerror=()=>alert("The image could not be read.");
+  reader.readAsDataURL(file);
+});
+removeImageButton.addEventListener("click",()=>{const c=getSelectedCard();if(!c?.image)return;saveHistory();delete c.image;render()});
 fontInput.addEventListener("change",()=>{
   const selected=getSelectedCards();if(!selected.length)return;
   saveHistory();
@@ -594,7 +619,8 @@ function importBoard(){
             type:String(c.type||"SCENE"),
             color:["yellow","blue","green","pink","purple","orange"].includes(c.color)?c.color:"yellow",
             font:String(c.font||"Inter, system-ui, sans-serif"),
-            fontSize:Math.max(10,Math.min(40,Number(c.fontSize)||16))
+            fontSize:Math.max(10,Math.min(40,Number(c.fontSize)||16)),
+            image:typeof c.image==="string"&&c.image.startsWith("data:image/")?c.image:""
           };
         });
 
