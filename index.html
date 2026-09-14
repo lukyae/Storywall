@@ -268,7 +268,8 @@ function setupCardEvents(el,card){
   });
 
   description.addEventListener("input",()=>{
-    card.description=description.textContent;
+    // innerText retains paragraph and line breaks created inside contenteditable.
+    card.description=description.innerText.replace(/\r\n?/g,"\n");
     saveBoard();
   });
 
