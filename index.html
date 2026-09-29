@@ -175,6 +175,24 @@ function saveBoard(){localStorage.setItem("storyWallCards",JSON.stringify(cards)
 function loadBoard(){const saved=localStorage.getItem("storyWallCards");if(!saved)return;try{cards=JSON.parse(saved);if(!Array.isArray(cards))cards=[];cards.forEach(c=>{delete c.video;delete c.videoName});if(cards.length)nextId=Math.max(...cards.map(c=>Number(c.id)||0))+1}catch{cards=[]}}
 function escapeHTML(v){return String(v||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
 
+function descriptionEditorText(editor){
+  // Browsers turn Enter into <div> and <br> elements. Reading innerText directly
+  // counts an empty <div><br></div> twice, which creates a phantom blank row.
+  const rows=[];
+  editor.childNodes.forEach(node=>{
+    if(node.nodeType===Node.TEXT_NODE){
+      rows.push(node.textContent||"");
+    }else if(node.nodeType===Node.ELEMENT_NODE){
+      if(node.tagName==="BR" || (node.textContent==="" && node.querySelector("br"))){
+        rows.push("");
+      }else{
+        rows.push((node.innerText||node.textContent||"").replace(/\r\n?/g,"\n"));
+      }
+    }
+  });
+  return rows.join("\n").replace(/\n+$/,"");
+}
+
 function render(){
   world.innerHTML="";
   updateWorldTransform();
@@ -271,11 +289,13 @@ function setupCardEvents(el,card){
     saveBoard();
   });
 
-  description.addEventListener("input",()=>{
-    // Keep real paragraph breaks, but remove the empty final paragraph browsers add after Enter.
-    card.description=description.innerText.replace(/\r\n?/g,"\n").replace(/\n+$/,"");
+  const saveDescription=()=>{
+    card.description=descriptionEditorText(description);
     saveBoard();
-  });
+  };
+  description.addEventListener("input",saveDescription);
+  // A click outside can redraw the board; save once more as the editor loses focus.
+  description.addEventListener("blur",saveDescription);
 
   title.addEventListener("pointerdown",e=>e.stopPropagation());
   description.addEventListener("pointerdown",e=>e.stopPropagation());
@@ -439,6 +459,16 @@ document.addEventListener("pointerup",()=>{
 canvas.addEventListener("pointerdown",e=>{
   if(e.button!==0) return;
   if(e.target!==canvas) return;
+
+  // Save a just-finished text edit before this click changes selection and redraws cards.
+  const activeEditor=document.activeElement;
+  if(activeEditor?.matches?.(".card-description[contenteditable='true']")){
+    const activeCard=cards.find(c=>String(c.id)===activeEditor.closest(".card")?.dataset.id);
+    if(activeCard){
+      activeCard.description=descriptionEditorText(activeEditor);
+      saveBoard();
+    }
+  }
 
   const r=canvas.getBoundingClientRect();
 
