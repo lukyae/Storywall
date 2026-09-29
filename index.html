@@ -33,6 +33,7 @@ button.primary{background:#f2f2f2;color:#111;border-color:#f2f2f2;font-weight:60
 .card-body{padding:12px;flex:1;min-height:0;display:flex;flex-direction:column}.card-title{font-size:17px;font-weight:750;line-height:1.2;margin-bottom:7px;outline:none}
 .card-description{font-size:13px;line-height:1.45;opacity:.8;outline:none;white-space:pre-wrap}
 .card-image{display:block;width:100%;min-height:0;flex:1;object-fit:contain;border-radius:6px;margin:0 0 10px;background:rgba(0,0,0,.08)}
+.card-video{display:block;width:100%;min-height:0;flex:1;border-radius:6px;margin:0 0 10px;background:#111}
 .card-footer{padding:7px 10px 9px;font-size:10px;opacity:.55}
 .resize-handle{position:absolute;z-index:3}.resize-right{right:0;top:38px;bottom:0;width:10px;cursor:ew-resize}.resize-corner{right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 45%,rgba(0,0,0,.28) 46%,rgba(0,0,0,.28) 55%,transparent 56%)}
 .yellow{background:#f8e9a8}.blue{background:#b9ddf7}.green{background:#c8e6c9}.pink{background:#f3c2d6}.purple{background:#d9c7f4}.orange{background:#f6c68d}
@@ -106,12 +107,12 @@ button.primary{background:#f2f2f2;color:#111;border-color:#f2f2f2;font-weight:60
     <textarea id="descriptionInput" placeholder="What happens in this scene?"></textarea>
   </div>
   <div class="field">
-    <label>Scene picture</label>
+    <label>Scene media</label>
     <div class="image-actions">
-      <input id="imageInput" type="file" accept="image/*">
+      <input id="imageInput" type="file" accept="image/*,video/mp4">
       <button id="removeImage" type="button">Remove</button>
     </div>
-    <span id="imageStatus" class="image-status">No picture selected</span>
+    <span id="imageStatus" class="image-status">No picture or video selected</span>
   </div>
   <div class="field">
     <label>Font</label>
@@ -171,7 +172,7 @@ function saveHistory(){undoStack.push(JSON.stringify(cards));if(undoStack.length
 function undo(){if(!undoStack.length)return;redoStack.push(JSON.stringify(cards));cards=JSON.parse(undoStack.pop());selectedCard=null;render()}
 function redo(){if(!redoStack.length)return;undoStack.push(JSON.stringify(cards));cards=JSON.parse(redoStack.pop());selectedCard=null;render()}
 function saveBoard(){localStorage.setItem("storyWallCards",JSON.stringify(cards))}
-function loadBoard(){const saved=localStorage.getItem("storyWallCards");if(!saved)return;try{cards=JSON.parse(saved);if(!Array.isArray(cards))cards=[];if(cards.length)nextId=Math.max(...cards.map(c=>Number(c.id)||0))+1}catch{cards=[]}}
+function loadBoard(){const saved=localStorage.getItem("storyWallCards");if(!saved)return;try{cards=JSON.parse(saved);if(!Array.isArray(cards))cards=[];cards.forEach(c=>{delete c.video;delete c.videoName});if(cards.length)nextId=Math.max(...cards.map(c=>Number(c.id)||0))+1}catch{cards=[]}}
 function escapeHTML(v){return String(v||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
 
 function render(){
@@ -195,6 +196,7 @@ function render(){
       </div>
       <div class="card-body">
         ${card.image ? `<img class="card-image" src="${card.image}" alt="Scene reference image">` : ""}
+        ${card.video ? `<video class="card-video" controls preload="metadata"><source src="${card.video}" type="video/mp4"></video>` : ""}
         <div class="card-title" contenteditable="true" spellcheck="true"
              style="font-size:${Math.max(13,(card.fontSize||16)+1)}px">${escapeHTML(card.title)}</div>
         <div class="card-description" contenteditable="true" spellcheck="true"
@@ -216,6 +218,7 @@ function setupCardEvents(el,card){
   const header=el.querySelector(".card-header");
   const title=el.querySelector(".card-title");
   const description=el.querySelector(".card-description");
+  el.querySelector(".card-video")?.addEventListener("pointerdown",e=>e.stopPropagation());
 
   el.querySelectorAll(".resize-handle").forEach(handle=>handle.addEventListener("pointerdown",e=>{
     if(e.button!==0)return;
@@ -228,6 +231,7 @@ function setupCardEvents(el,card){
   el.addEventListener("pointerdown",e=>{
     if(e.target.closest("[contenteditable]")) return;
     if(e.target.closest(".card-menu")) return;
+    if(e.target.closest("video")) return;
 
     if(e.ctrlKey||e.metaKey){
       toggleCardSelection(card.id);
@@ -268,8 +272,8 @@ function setupCardEvents(el,card){
   });
 
   description.addEventListener("input",()=>{
-    // innerText retains paragraph and line breaks created inside contenteditable.
-    card.description=description.innerText.replace(/\r\n?/g,"\n");
+    // Keep real paragraph breaks, but remove the empty final paragraph browsers add after Enter.
+    card.description=description.innerText.replace(/\r\n?/g,"\n").replace(/\n+$/,"");
     saveBoard();
   });
 
@@ -335,8 +339,8 @@ function updatePanel(){
   fontInput.value=c?.font||"Inter, system-ui, sans-serif";
   fontSizeInput.value=String(c?.fontSize||16);
   imageInput.value="";
-  imageStatus.textContent=c?.image?"Picture attached":"No picture selected";
-  removeImageButton.disabled=!c?.image;
+  imageStatus.textContent=c?.image?"Picture attached":c?.video?`MP4 attached: ${c.videoName||"video"}`:"No picture or video selected";
+  removeImageButton.disabled=!(c?.image||c?.video);
   document.querySelectorAll(".color").forEach(b=>b.classList.toggle("active",b.dataset.color===c?.color));
 }
 numberInput.addEventListener("input",()=>{
@@ -354,13 +358,17 @@ descriptionInput.addEventListener("input",()=>{const c=getSelectedCard();if(c){c
 imageInput.addEventListener("change",()=>{
   const c=getSelectedCard(),file=imageInput.files?.[0];
   if(!c||!file)return;
-  if(!file.type.startsWith("image/")){alert("Please choose an image file.");imageInput.value="";return}
+  if(file.type==="video/mp4"){
+    if(c.video?.startsWith("blob:"))URL.revokeObjectURL(c.video);
+    saveHistory();delete c.image;c.video=URL.createObjectURL(file);c.videoName=file.name;render();return;
+  }
+  if(!file.type.startsWith("image/")){alert("Please choose an image or MP4 video file.");imageInput.value="";return}
   const reader=new FileReader();
-  reader.onload=()=>{saveHistory();c.image=reader.result;render()};
+  reader.onload=()=>{if(c.video?.startsWith("blob:"))URL.revokeObjectURL(c.video);saveHistory();delete c.video;delete c.videoName;c.image=reader.result;render()};
   reader.onerror=()=>alert("The image could not be read.");
   reader.readAsDataURL(file);
 });
-removeImageButton.addEventListener("click",()=>{const c=getSelectedCard();if(!c?.image)return;saveHistory();delete c.image;render()});
+removeImageButton.addEventListener("click",()=>{const c=getSelectedCard();if(!(c?.image||c?.video))return;if(c.video?.startsWith("blob:"))URL.revokeObjectURL(c.video);saveHistory();delete c.image;delete c.video;delete c.videoName;render()});
 fontInput.addEventListener("change",()=>{
   const selected=getSelectedCards();if(!selected.length)return;
   saveHistory();
