@@ -136,6 +136,8 @@ button.primary{background:#f2f2f2;color:#111;border-color:#f2f2f2;font-weight:60
       <option value="16">Large</option>
       <option value="18">Extra Large</option>
       <option value="21">Huge</option>
+      <option value="28">Giant</option>
+      <option value="36">Poster</option>
     </select>
   </div>
 
@@ -241,10 +243,12 @@ function setupCardEvents(el,card){
   el.querySelectorAll(".resize-handle").forEach(handle=>handle.addEventListener("pointerdown",e=>{
     if(e.button!==0)return;
     e.preventDefault();e.stopPropagation();
+    handle.setPointerCapture(e.pointerId);
     const r=canvas.getBoundingClientRect();
-    resizing={card,el,mode:handle.dataset.resize,startX:(e.clientX-r.left-panX)/zoom,startY:(e.clientY-r.top-panY)/zoom,startWidth:el.offsetWidth,startHeight:el.offsetHeight,snapshot:JSON.stringify(cards)};
+    resizing={card,el,handle,pointerId:e.pointerId,mode:handle.dataset.resize,startX:(e.clientX-r.left-panX)/zoom,startY:(e.clientY-r.top-panY)/zoom,startWidth:el.offsetWidth,startHeight:el.offsetHeight,snapshot:JSON.stringify(cards)};
     document.body.style.userSelect="none";
   }));
+  el.querySelectorAll(".resize-handle").forEach(handle=>handle.addEventListener("lostpointercapture",finishResize));
 
   el.addEventListener("pointerdown",e=>{
     if(e.target.closest("[contenteditable]")) return;
@@ -325,7 +329,7 @@ function getSelectedCards(){
 function createCard(x=100,y=100,type="SCENE"){
   saveHistory();
   const card={id:nextId++,number:"",x,y,title:type==="ACT"?"Act":"New Scene",description:type==="ACT"?"Story section":"Describe what happens...",type,color:type==="ACT"?"purple":"yellow",
-    font:"Inter, system-ui, sans-serif",fontSize:21};
+    font:"Inter, system-ui, sans-serif",fontSize:28};
   cards.push(card);selectedCards=new Set([card.id]);selectedCard=card.id;render();
 }
 function getCanvasCenter(){return{x:(canvas.clientWidth/2-panX)/zoom,y:(canvas.clientHeight/2-panY)/zoom}}
@@ -398,7 +402,7 @@ fontInput.addEventListener("change",()=>{
 fontSizeInput.addEventListener("change",()=>{
   const selected=getSelectedCards();if(!selected.length)return;
   saveHistory();
-  const size=Math.max(10,Math.min(40,Number(fontSizeInput.value)||16));
+  const size=Math.max(10,Math.min(52,Number(fontSizeInput.value)||16));
   selected.forEach(c=>c.fontSize=size);
   render();
 });
@@ -451,11 +455,17 @@ document.addEventListener("pointermove",e=>{
   resizing.el.style.width=`${resizing.card.width||resizing.startWidth}px`;
   if(resizing.card.height)resizing.el.style.height=`${resizing.card.height}px`;
 });
-document.addEventListener("pointerup",()=>{
+function finishResize(){
   if(!resizing)return;
-  if(resizing.snapshot!==JSON.stringify(cards)){undoStack.push(resizing.snapshot);if(undoStack.length>50)undoStack.shift();redoStack=[];saveBoard()}
-  resizing=null;document.body.style.userSelect="";
-});
+  const current=resizing;
+  resizing=null;
+  if(current.snapshot!==JSON.stringify(cards)){undoStack.push(current.snapshot);if(undoStack.length>50)undoStack.shift();redoStack=[];saveBoard()}
+  if(current.handle.hasPointerCapture?.(current.pointerId))current.handle.releasePointerCapture(current.pointerId);
+  document.body.style.userSelect="";
+}
+document.addEventListener("pointerup",finishResize);
+document.addEventListener("pointercancel",finishResize);
+window.addEventListener("blur",finishResize);
 canvas.addEventListener("pointerdown",e=>{
   if(e.button!==0) return;
   if(e.target!==canvas) return;
@@ -689,7 +699,7 @@ function importBoard(){
             type:String(c.type||"SCENE"),
             color:["yellow","blue","green","pink","purple","orange"].includes(c.color)?c.color:"yellow",
             font:String(c.font||"Inter, system-ui, sans-serif"),
-            fontSize:Math.max(10,Math.min(40,Number(c.fontSize)||16)),
+            fontSize:Math.max(10,Math.min(52,Number(c.fontSize)||16)),
             width:Math.max(180,Number(c.width)||260),
             height:Math.max(220,Number(c.height)||220),
             image:typeof c.image==="string"&&c.image.startsWith("data:image/")?c.image:""
